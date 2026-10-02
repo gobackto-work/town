@@ -1,0 +1,119 @@
+# town — the management interface for the Pi agent platform.
+#
+# town is the platform's identity holder. It runs the GitHub OAuth flow, holds the
+# session cookie, and signs a short-lived Ed25519 assertion that pestilence verifies.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/gobackto-work/town
+  # Defaults to .Chart.AppVersion when empty.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+namespace:
+  # Create the namespace. It carries the Pod Security Admission labels, so the chart
+  # owns them rather than relying on `helm install --create-namespace`.
+  create: true
+  name: town
+
+serviceAccount:
+  create: true
+  name: town
+  # town holds NO Kubernetes credential. The ServiceAccount exists to be referenced,
+  # not to be used. Turning this on would make town a cluster-privileged component.
+  automountServiceAccountToken: false
+
+config:
+  # The control plane. town is the only component that talks to it.
+  pestilenceUrl: http://control-plane.pestilence.svc.cluster.local:8080
+  # Must match the OAuth app's homepage and callback URL EXACTLY. A mismatch is the
+  # most common way the sign-in flow fails, and GitHub does not name the value it wanted.
+  townUrl: https://town.gobackto.work
+  # The only authorization rule: membership of this GitHub organisation.
+  githubOrg: gobackto-work
+  # Not a secret: it is in the redirect URL the browser is sent to.
+  githubClientId: ""
+  sessionTtlSeconds: 43200
+  assertionAudience: pestilence-api
+  assertionTtlSeconds: 120
+  assertionKeyFile: /var/run/town/assertion-key.pem
+
+secrets:
+  github:
+    # Referenced by default. An existing secret is NEVER recreated or overwritten.
+    existingSecret: town-secrets
+    # Set true only to create the secret when it does not already exist. The chart
+    # uses `lookup`, so an existing secret is left alone even when this is true.
+    create: false
+    # Required when create is true and the secret is absent.
+    clientSecret: ""
+    # Generated when create is true, empty, and the secret is absent.
+    sessionSecret: ""
+
+assertion:
+  # The Ed25519 private key. Referenced by default, and never regenerated: replacing
+  # it without also replacing pestilence's public key stops every request.
+  existingSecret: town-assertion-key
+  # Set true only to create the secret when it does not already exist.
+  create: false
+  # The PKCS#8 PEM private key. Required when create is true and the secret is absent.
+  # Generate a matched pair with cluster-setup-scripts/generate-keys.sh.
+  privateKey: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: traefik
+  host: town.gobackto.work
+  path: /
+  pathType: Prefix
+  # No secretName by default: the wildcard certificate for the domain is served from
+  # Traefik's default TLSStore. Naming a secret here would copy the wildcard private
+  # key into this namespace.
+  tls:
+    enabled: true
+  annotations: {}
+
+networkPolicy:
+  enabled: true
+  # Traefik is the only caller. Select on the namespace rather than pod labels: a
+  # chart upgrade that renamed a pod label would otherwise break sign-in silently.
+  ingressNamespace: traefik
+  # "internet yes, LAN no" for the GitHub flow. See the reasoning in the template.
+  allowInternetEgress: true
+
+podSecurityContext:
+  runAsNonRoot: true
+  # The `node` user in the image. Numeric, because with runAsNonRoot the kubelet must
+  # verify the user is non-root and cannot resolve a name from the image config.
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

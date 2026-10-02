@@ -1,0 +1,34 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "town.name" . }}
+  namespace: {{ include "town.namespace" . }}
+  labels:
+    {{- include "town.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.path }}
+            pathType: {{ .Values.ingress.pathType }}
+            backend:
+              service:
+                name: {{ include "town.name" . }}
+                port:
+                  number: {{ .Values.service.port }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    # No secretName, deliberately. The wildcard certificate lives in Traefik's default
+    # TLSStore, and every Ingress for a host under it inherits that. Naming a secret
+    # here would copy the wildcard private key into this namespace.
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+  {{- end }}
+{{- end }}

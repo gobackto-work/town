@@ -20,7 +20,7 @@
 # whole gate runs on one host.
 #
 # Usage
-#   hack/verify.sh
+#   scripts/verify.sh
 
 set -uo pipefail
 
@@ -126,7 +126,17 @@ check "npm audit" npm audit --audit-level=moderate
 
 step "image and scripts"
 check "hadolint (Dockerfile)" hadolint Dockerfile
-check "shellcheck (hack scripts)" shellcheck -s bash hack/verify.sh
+check "shellcheck (scripts and setup scripts)" shellcheck -s bash scripts/*.sh cluster-setup-scripts/*.sh
+
+step "chart"
+require helm "$(helm version --short 2>&1)" "v4"
+check "helm lint" helm lint charts/town
+# Default values reference pre-existing secrets, which is the path an existing cluster
+# takes. The second call exercises the create-if-absent path a new cluster takes.
+check "helm template (reference existing secrets)" helm template town charts/town
+check "helm template (create secrets when absent)" helm template town charts/town \
+	--set secrets.github.create=true --set secrets.github.clientSecret=x \
+	--set assertion.create=true --set assertion.privateKey=x
 
 step "secrets"
 check "gitleaks (tree + git history)" gitleaks detect --source . --no-banner --redact

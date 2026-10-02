@@ -82,8 +82,7 @@ anyway.
 ### Keys, secrets and the deployment
 
 ```sh
-hack/generate-keys.sh > /tmp/town-keys.sh   # inspect before running
-sh /tmp/town-keys.sh
+cluster-setup-scripts/generate-keys.sh
 ```
 
 That creates `Secret/town-assertion-key` in the `town` namespace (the private key) and
@@ -93,13 +92,11 @@ replacing one without the other stops every request. Neither is written to the r
 The client secret and session secret go in the same namespace:
 
 ```sh
-kubectl -n town create secret generic town-secrets \
-  --from-literal=GITHUB_CLIENT_SECRET=... \
-  --from-literal=SESSION_SECRET="$(openssl rand -base64 48)"
+cluster-setup-scripts/create-secrets.sh
 ```
 
-Generate the session secret; do not invent one. It is the only thing standing between a
-browser and a forged cookie.
+The script generates the session secret. Do not invent one: it is the only thing
+standing between a browser and a forged cookie.
 
 ## How a sign-in works
 

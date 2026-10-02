@@ -1,0 +1,99 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $ns := include "town.namespace" . }}
+# Default-deny ingress. Everything that is not named below is refused.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: {{ $ns }}
+  labels:
+    {{- include "town.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+# The one named caller. Selecting on the NAMESPACE rather than pod labels is
+# deliberate: pod labels are chart-managed, and a Helm upgrade that renamed one
+# would break sign-in with no obvious cause.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-traefik-ingress
+  namespace: {{ $ns }}
+  labels:
+    {{- include "town.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressNamespace }}
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-dns-and-control-plane
+  namespace: {{ $ns }}
+  labels:
+    {{- include "town.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: pestilence
+      ports:
+        - protocol: TCP
+          port: 8080
+{{- if .Values.networkPolicy.allowInternetEgress }}
+---
+# Internet egress, "internet yes, LAN no".
+#
+# The GitHub flow needs exactly two hosts -- github.com and api.github.com -- but a
+# hostname-scoped rule (toFQDNs) is unavailable in CNI chaining mode: it is accepted,
+# reports itself as enforced, and matches nothing. A CIDR list from api.github.com/meta
+# was rejected because it cannot be trusted to be complete.
+#
+# The cost of the widening is worth naming: a compromised town could exfiltrate the
+# session secret, the GitHub client secret and the assertion key to any internet host.
+# What it still cannot do is reach the cluster or the private network, which is the
+# half that matters more.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-internet
+  namespace: {{ $ns }}
+  labels:
+    {{- include "town.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 127.0.0.0/8
+              - 100.64.0.0/10
+{{- end }}
+{{- end }}

@@ -52,7 +52,7 @@ export class Assertions {
     } catch (cause) {
       throw new Error(
         `cannot read the assertion signing key at ${config.keyFile}. ` +
-          "Generate one with hack/generate-keys.sh -- see docs/auth.md.",
+          "Generate one with cluster-setup-scripts/generate-keys.sh -- see docs/auth.md.",
         { cause },
       );
     }

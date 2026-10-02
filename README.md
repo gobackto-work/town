@@ -22,6 +22,14 @@ npm start
 
 Set the required GitHub OAuth, organisation, and session settings first. See [Authentication](docs/auth.md) for configuration and the sign-in flow.
 
+## Deploying
+
+```sh
+helm install town oci://ghcr.io/gobackto-work/charts/town --version 1.0.0
+```
+
+The chart references pre-existing secrets. See [Cluster setup](cluster-setup-scripts/README.md) for the assertion key pair and the runtime secrets.
+
 ## Project status
 
 Workspace management and organisation-restricted sign-in are implemented. Audit logging is still to come.

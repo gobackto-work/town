@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "town.name" . }}
+  namespace: {{ include "town.namespace" . }}
+  labels:
+    {{- include "town.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "town.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "town.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "town.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ include "town.name" . }}
+          image: {{ include "town.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PESTILENCE_URL
+              value: {{ .Values.config.pestilenceUrl | quote }}
+            - name: TOWN_URL
+              value: {{ .Values.config.townUrl | quote }}
+            - name: GITHUB_CLIENT_ID
+              value: {{ .Values.config.githubClientId | quote }}
+            - name: GITHUB_ORG
+              value: {{ .Values.config.githubOrg | quote }}
+            - name: SESSION_TTL_SECONDS
+              value: {{ .Values.config.sessionTtlSeconds | quote }}
+            - name: ASSERTION_AUDIENCE
+              value: {{ .Values.config.assertionAudience | quote }}
+            - name: ASSERTION_TTL_SECONDS
+              value: {{ .Values.config.assertionTtlSeconds | quote }}
+            - name: ASSERTION_KEY_FILE
+              value: {{ .Values.config.assertionKeyFile | quote }}
+            # The two real secrets. town refuses to start without them, which is the
+            # point: a town that cannot identify anyone is an unauthenticated
+            # workspace-provisioning API.
+            - name: GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "town.secretName" . }}
+                  key: GITHUB_CLIENT_SECRET
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "town.secretName" . }}
+                  key: SESSION_SECRET
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          # Liveness must NOT check the control plane: a dependency being down should
+          # stop traffic, not restart this process. Readiness is the one that checks.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            # Nothing is written outside this. With readOnlyRootFilesystem, anything the
+            # process tried to write to its own image fails loudly rather than vanishing.
+            - name: tmp
+              mountPath: /tmp
+            - name: assertion-key
+              mountPath: /var/run/town
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: assertion-key
+          secret:
+            secretName: {{ include "town.assertionSecretName" . }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

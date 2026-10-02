@@ -1,0 +1,26 @@
+town is installed in namespace {{ include "town.namespace" . }}.
+
+  image:  {{ include "town.image" . }}
+  host:   {{ if .Values.ingress.enabled }}{{ .Values.ingress.host }}{{ else }}(no ingress){{ end }}
+
+{{ if not .Values.secrets.github.create -}}
+This release references the pre-existing secret {{ include "town.secretName" . }}.
+Create it once if it does not exist:
+
+  kubectl -n {{ include "town.namespace" . }} create secret generic {{ include "town.secretName" . }} \
+    --from-literal=GITHUB_CLIENT_SECRET=... \
+    --from-literal=SESSION_SECRET="$(openssl rand -base64 48)"
+{{- end }}
+
+{{ if not .Values.assertion.create -}}
+This release references the pre-existing secret {{ include "town.assertionSecretName" . }}.
+The Ed25519 assertion keypair is a PAIR: the private half lives here, and the public
+half lives in the pestilence namespace as ConfigMap/town-assertion-pubkey. Replacing
+one without the other stops every request. Generate both with:
+
+  cluster-setup-scripts/generate-keys.sh
+{{- end }}
+
+Register the GitHub OAuth app with the callback URL exactly:
+
+  {{ .Values.config.townUrl }}/auth/callback
