@@ -7,7 +7,9 @@
 # Node rather than distroless, unlike the pestilence and scarab images: there is no
 # static binary to extract, and a node runtime is the smallest thing that can run this.
 
-FROM node:24-slim AS build
+# Digest-pinned. `node:24-slim` and `node:24-bookworm-slim` are the same image, so this
+# digest is shared with scarab's agent image. A tag can be moved; a digest cannot.
+FROM node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS build
 WORKDIR /app
 
 # Dependencies first, so a source-only change does not re-resolve the tree.
@@ -23,7 +25,7 @@ COPY . .
 # and nothing from eslint, vite or typescript.
 RUN npm run build && npm ci --omit=dev
 
-FROM node:24-slim
+FROM node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
 WORKDIR /app
 ENV NODE_ENV=production
 
