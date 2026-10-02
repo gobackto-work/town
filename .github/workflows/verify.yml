@@ -30,7 +30,7 @@ jobs:
 
       - name: Install the pinned tools
         run: |
-          scripts/install-tools.sh "$RUNNER_TEMP/bin"
+          bash scripts/install-tools.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       - run: npm ci

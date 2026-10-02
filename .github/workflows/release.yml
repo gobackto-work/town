@@ -73,7 +73,7 @@ jobs:
 
       - name: Install helm
         run: |
-          scripts/install-tools.sh "$RUNNER_TEMP/bin"
+          bash scripts/install-tools.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       - name: Package the chart
