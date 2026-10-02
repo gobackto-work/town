@@ -1,0 +1,16 @@
+# Node
+node_modules/
+
+# Build output (vite build) and the image build context
+dist/
+image/dist/
+
+# Env files
+.env
+.env.local
+
+# Editor/IDE
+# .idea/
+# .vscode/
+
+docs/private-*

@@ -1,0 +1,14 @@
+node_modules
+dist
+image/dist
+.git
+.gitignore
+
+# Not needed by the build or the runtime.
+docs
+hack
+README.md
+**/*.test.ts
+**/*.test.tsx
+# Test-only support code lives under src/, so it has to be named separately.
+src/server/test-support.ts

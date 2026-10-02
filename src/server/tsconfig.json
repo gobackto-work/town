@@ -1,0 +1,20 @@
+{
+  // Server-only TypeScript.
+  //
+  // This lives HERE rather than at the repository root because both an editor and
+  // eslint's project service locate a project by walking up from the file looking for
+  // the nearest tsconfig.json. A root-level tsconfig.server.json is simply never
+  // found, and every server file is then reported as "not found by the project
+  // service" -- which reads as a lint configuration problem rather than a missing
+  // project.
+  //
+  // The only thing it changes is dropping the DOM libs: with one config the server
+  // would happily typecheck `document`, which node does not have, and the mistake
+  // would surface at runtime instead of at review.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": ["**/*", "../shared/**/*"]
+}

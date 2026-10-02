@@ -1,0 +1,31 @@
+{
+  // The CLIENT config, and the one an editor picks up by default. The server has its
+  // own (tsconfig.server.json) which drops the DOM libs.
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "jsx": "react-jsx",
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": true,
+
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+
+    // The server is run by node directly with no build step, so its TypeScript has to
+    // be ERASABLE: no enums, no namespaces, no parameter properties. Node strips types
+    // and never transpiles, so anything that is not merely a type annotation would
+    // fail at runtime rather than at build. This makes the compiler enforce it.
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src/client/**/*", "src/shared/**/*", "vite.config.ts"]
+}
