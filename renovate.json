@@ -1,0 +1,17 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    "docker:pinDigests"
+  ],
+  "packageRules": [
+    {
+      "description": "The Dockerfile pins node by tag AND digest. Bump both in one PR, and keep the build and runtime stages in step: they are the same image, and a mismatch is a silent difference between what builds the client and what serves it.",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "groupName": "base image"
+    }
+  ]
+}

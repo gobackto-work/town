@@ -103,6 +103,24 @@ for tool in tsc eslint knip jscpd; do
 	fi
 done
 
+step "tool installer"
+# Every tool the gate REQUIRES must also be installed by scripts/install-tools.sh. A
+# tool the installer omits falls back to whatever the runner image happens to ship --
+# which is how shellcheck 0.9.0 (ubuntu-24.04) shadowed the required 0.11.0: green on
+# a developer host, red in CI. The gate is the same everywhere, or it is not a gate.
+missing=""
+while read -r tool; do
+	case "$tool" in
+	go | node | gofmt) continue ;; # from the toolchain, not the installer
+	esac
+	grep -q -- "$tool" scripts/install-tools.sh || missing="$missing $tool"
+done < <(sed -n 's/^require \([A-Za-z][A-Za-z0-9_-]*\) .*/\1/p' scripts/verify.sh | sort -u)
+if [ -n "$missing" ]; then
+	bad "scripts/install-tools.sh does not install:$missing"
+else
+	ok "scripts/install-tools.sh covers every required tool"
+fi
+
 step "types and tests"
 check "tsc (client, and the shared types)" npx --no-install tsc --noEmit
 check "tsc (server, without the DOM libs)" npx --no-install tsc -p src/server/tsconfig.json --noEmit
@@ -127,16 +145,6 @@ check "npm audit" npm audit --audit-level=moderate
 step "image and scripts"
 check "hadolint (Dockerfile)" hadolint Dockerfile
 check "shellcheck (scripts and setup scripts)" shellcheck -s bash scripts/*.sh cluster-setup-scripts/*.sh
-
-step "chart"
-require helm "$(helm version --short 2>&1)" "v4"
-check "helm lint" helm lint charts/town
-# Default values reference pre-existing secrets, which is the path an existing cluster
-# takes. The second call exercises the create-if-absent path a new cluster takes.
-check "helm template (reference existing secrets)" helm template town charts/town
-check "helm template (create secrets when absent)" helm template town charts/town \
-	--set secrets.github.create=true --set secrets.github.clientSecret=x \
-	--set assertion.create=true --set assertion.privateKey=x
 
 step "secrets"
 check "gitleaks (tree + git history)" gitleaks detect --source . --no-banner --redact

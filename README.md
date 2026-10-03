@@ -24,11 +24,11 @@ Set the required GitHub OAuth, organisation, and session settings first. See [Au
 
 ## Deploying
 
-```sh
-helm install town oci://ghcr.io/gobackto-work/charts/town --version 1.0.0
-```
+The Helm chart lives in [helm-charts](https://github.com/gobackto-work/helm-charts). This repository builds and publishes an image; that repository names the version it deploys.
 
-The chart references pre-existing secrets. See [Cluster setup](cluster-setup-scripts/README.md) for the assertion key pair and the runtime secrets.
+```sh
+helm install platform oci://ghcr.io/gobackto-work/charts/platform --version 1.0.0
+```
 
 ## Project status
 
