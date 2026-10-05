@@ -172,3 +172,26 @@ test("an unknown non-API path does not masquerade as JSON", async () => {
   const response = await app.request("/some/deep/link");
   assert.match(await response.text(), /client not built/);
 });
+
+test("the run log is behind the session gate and returns what the control plane holds", async () => {
+  const runs = [
+    {
+      id: "01RUN",
+      workspaceId: TEST_WORKSPACE.id,
+      state: "waiting" as const,
+      mode: "interactive" as const,
+      startedAt: "2026-10-05T01:00:00Z",
+      updatedAt: "2026-10-05T01:05:00Z",
+      lastSequence: 4,
+    },
+  ];
+  const deps = await testDeps({ controlPlane: fakeControlPlane({ runs: () => Promise.resolve(runs) }) });
+
+  // No session, no runs: an unauthenticated caller learns nothing about anyone's activity.
+  const refused = await createApp(deps).request("/api/runs");
+  assert.equal(refused.status, 401);
+
+  const response = await createApp(deps).request("/api/runs", { headers: { cookie: await sessionCookie(deps) } });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await body(response), { runs });
+});

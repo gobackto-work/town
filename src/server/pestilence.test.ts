@@ -147,3 +147,38 @@ test("the health probe reports false when the control plane is down", async (t) 
   t.mock.method(globalThis, "fetch", () => Promise.reject(new Error("ECONNREFUSED")));
   assert.equal(await controlPlaneHealthy("http://cp:8080"), false);
 });
+
+test("runs unwraps the runs envelope and asks the log endpoint", async (t) => {
+  const calls = stubFetch(t, () =>
+    json({
+      runs: [
+        {
+          id: "01RUN",
+          workspaceId: "01WS",
+          state: "waiting",
+          mode: "interactive",
+          startedAt: "2026-10-05T01:00:00Z",
+          updatedAt: "2026-10-05T01:05:00Z",
+          lastSequence: 4,
+        },
+      ],
+    }),
+  );
+
+  const runs = await client("http://cp:8080").runs();
+
+  assert.deepEqual(calls.map((call) => call.url), ["http://cp:8080/api/runs"]);
+  assert.equal(runs.length, 1);
+  // The log, and not the event queue. Reading the events would take a cursor, and a
+  // consumer that took one and never acknowledged it would stop the record pruning.
+  assert.equal(runs[0]?.state, "waiting");
+  // The record does not duplicate the workspace registry, so a reader joins this itself.
+  assert.equal(runs[0]?.workspaceId, "01WS");
+  assert.equal(runs[0]?.endedAt, undefined);
+});
+
+test("the runs request carries the same assertion as every other call", async (t) => {
+  const calls = stubFetch(t, () => json({ runs: [] }));
+  await client("http://cp:8080").runs();
+  assert.equal(calls[0]?.authorization, `Bearer ${ASSERTION}`);
+});

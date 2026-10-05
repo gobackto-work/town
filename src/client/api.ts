@@ -5,7 +5,7 @@
 // attached.
 
 import { ApiError } from "../shared/errors.ts";
-import type { ApiErrorBody, CreateWorkspaceRequest, Identity, Workspace, WorkspaceList } from "../shared/types.ts";
+import type { ApiErrorBody, CreateWorkspaceRequest, Identity, RunList, Workspace, WorkspaceList } from "../shared/types.ts";
 
 export const api = {
   me: () => request<{ user: Identity }>("/api/me", {}).then((r) => r.user),
@@ -18,6 +18,7 @@ export const api = {
     }),
   remove: (id: string) => request<Workspace>(`/api/workspaces/${encodeURIComponent(id)}`, { method: "DELETE" }),
   retry: (id: string) => request<Workspace>(`/api/workspaces/${encodeURIComponent(id)}/retry`, { method: "POST" }),
+  runs: () => request<RunList>("/api/runs", {}).then((r) => r.runs),
 };
 
 /**
