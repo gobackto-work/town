@@ -217,3 +217,21 @@ a.button {
 .toggle input {
   cursor: pointer;
 }
+
+/* The run log, below the workspace list. */
+.activity {
+  margin-top: 2.5rem;
+}
+
+.activity h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+/*
+ * "Waiting for you" is the one state worth looking at, because it means an agent has stopped
+ * and cannot continue without a person. It is the state a notification will carry.
+ */
+.state.waiting {
+  font-weight: 600;
+}

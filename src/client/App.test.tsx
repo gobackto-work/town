@@ -13,7 +13,13 @@ function json(body: unknown, status = 200): Response {
 
 function stub(t: TestContext, respond: (path: string) => Response): void {
   t.mock.method(globalThis, "fetch", (input: string | URL | Request) => {
-    return Promise.resolve(respond(urlOf(input)));
+    const path = urlOf(input);
+    // The activity view reads the run log on mount. Answering it here keeps a test
+    // about sign-in from having to know that a second endpoint exists.
+    if (path.endsWith("/api/runs")) {
+      return Promise.resolve(json({ runs: [] }));
+    }
+    return Promise.resolve(respond(path));
   });
 }
 

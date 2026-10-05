@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Activity } from "./Activity.tsx";
+import { useRuns } from "./useRuns.ts";
 import type { EdgeFailureCode, Identity } from "../shared/types.ts";
 import { takeQueryCode } from "./queryMessage.ts";
 import { WorkspaceTable } from "./WorkspaceTable.tsx";
@@ -30,6 +32,7 @@ interface WorkspacesProps {
 
 export function Workspaces({ user }: WorkspacesProps) {
   const { workspaces, error, busy, refresh, create, remove, retry } = useWorkspaces();
+  const runs = useRuns();
   const refused = edgeError();
 
   // DELETED is a RECORD, not a resource: the namespace and the broker are long gone, and
@@ -57,17 +60,7 @@ export function Workspaces({ user }: WorkspacesProps) {
         </div>
       </header>
 
-      {refused !== null && (
-        <p className="banner" role="alert">
-          {refused}
-        </p>
-      )}
-
-      {error !== null && (
-        <p className="banner" role="alert">
-          {error}
-        </p>
-      )}
+      <Banners refused={refused} error={error} runsError={runs.error} />
 
       <div className="toolbar">
         <button type="button" onClick={create} disabled={busy}>
@@ -91,6 +84,43 @@ export function Workspaces({ user }: WorkspacesProps) {
         onRemove={remove}
         onRetry={retry}
       />
+
+      {/* Every workspace, not the visible ones: a run in a deleted workspace still
+          needs a name. */}
+      <Activity runs={runs.runs} workspaces={workspaces} onRefresh={runs.refresh} />
+    </>
+  );
+}
+
+/**
+ * The error banners.
+ *
+ * One component rather than three copies of the same four lines. There are three because
+ * three requests can fail independently, and they are shown the same way so that a failure
+ * never looks like nothing happened.
+ */
+function Banners(props: {
+  readonly refused: string | null;
+  readonly error: string | null;
+  readonly runsError: string | null;
+}) {
+  return (
+    <>
+      {props.refused !== null && (
+        <p className="banner" role="alert">
+          {props.refused}
+        </p>
+      )}
+      {props.error !== null && (
+        <p className="banner" role="alert">
+          {props.error}
+        </p>
+      )}
+      {props.runsError !== null && (
+        <p className="banner" role="alert">
+          {props.runsError}
+        </p>
+      )}
     </>
   );
 }
