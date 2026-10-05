@@ -7,6 +7,8 @@ import type {
   ApiErrorBody,
   AuthorizedWorkspace,
   CreateWorkspaceRequest,
+  Run,
+  RunList,
   Workspace,
   WorkspaceList,
 } from "../shared/types.ts";
@@ -37,6 +39,15 @@ export interface ControlPlane {
    * copies would drift, and the one that drifted would be the one nobody tested.
    */
   authorize(hostname: string, signal?: AbortSignal): Promise<AuthorizedWorkspace>;
+
+  /**
+   * The owner's runs, most recently changed first.
+   *
+   * The LOG and not the queue. It takes no cursor on the control plane's side, so it can be
+   * called on every request without consuming anything, and it does not hold the record's
+   * retention bound. Reading the events instead would do both.
+   */
+  runs(signal?: AbortSignal): Promise<Run[]>;
 }
 
 /**
@@ -92,6 +103,11 @@ export class ControlPlaneClient implements ControlPlane {
 
   async authorize(hostname: string, signal?: AbortSignal): Promise<AuthorizedWorkspace> {
     return this.#request<AuthorizedWorkspace>("/api/authorize", "POST", { hostname }, signal);
+  }
+
+  async runs(signal?: AbortSignal): Promise<Run[]> {
+    const body = await this.#request<RunList>("/api/runs", "GET", undefined, signal);
+    return body.runs;
   }
 
   /** True if the control plane answers its health endpoint. Used by /readyz. */

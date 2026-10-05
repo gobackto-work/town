@@ -40,12 +40,27 @@ export function createApp(deps: Deps): Hono<AppEnv> {
   registerAuth(app, deps);
   registerEdge(app, deps);
   registerWorkspaceRoutes(app, deps);
+  registerRunRoutes(app, deps);
 
   registerNotFound(app);
   registerStatic(app, deps.config.staticDir);
   app.onError((err, c) => handleError(err, c));
 
   return app;
+}
+
+/**
+ * The run log, behind the session gate.
+ *
+ * Read-only and on request. The control plane takes no cursor for this read, so a page can
+ * call it as often as it likes without consuming a notification and without holding the
+ * record's retention bound. That is the whole reason this exists beside the events API
+ * rather than reusing it.
+ */
+function registerRunRoutes(app: Hono<AppEnv>, deps: Deps): void {
+  const gate = requireSession(deps);
+
+  app.get("/api/runs", gate, async (c) => c.json({ runs: await c.get("controlPlane").runs() }));
 }
 
 /**

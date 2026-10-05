@@ -112,3 +112,49 @@ export interface Identity {
 export interface WorkspaceList {
   workspaces: Workspace[];
 }
+
+/**
+ * Mirrors the Go run states in pestilence/internal/eventlog.
+ *
+ * A batch run cannot reach "waiting". A run that waits for a person who is not there waits
+ * for ever, so the record refuses the transition rather than storing a state nothing can
+ * leave.
+ */
+// Not exported: only ever reached through Run, and knip is right that an unused export is
+// just a second way to name the same thing. Export them when a consumer needs to name one,
+// which is what a control that switches on the state would do.
+type RunState =
+  | "running"
+  | "waiting"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "budget_exhausted";
+
+/** Whether a run can block on a person. */
+type RunMode = "interactive" | "batch";
+
+/**
+ * One run, from the control plane's log.
+ *
+ * This is the LOG and not the queue. The control plane's events are a delivery queue with a
+ * cursor, and reading them without acknowledging pins its retention bound at zero; the log is
+ * one retained row per run, and reading it consumes nothing and blocks nothing.
+ *
+ * It carries a workspace id and not a slug, because the record does not duplicate the
+ * workspace registry. Join it with the workspace list to show a name.
+ */
+export interface Run {
+  id: string;
+  workspaceId: string;
+  state: RunState;
+  mode: RunMode;
+  startedAt: string;
+  updatedAt: string;
+  endedAt?: string;
+  lastSequence: number;
+}
+
+export interface RunList {
+  runs: Run[];
+}
