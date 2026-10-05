@@ -3,7 +3,7 @@ import "./test-setup.ts"; // MUST be first: it installs the DOM react-dom needs.
 import assert from "node:assert/strict";
 import { afterEach, test, type TestContext } from "node:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { Workspace } from "../shared/types.ts";
+import type { Run, Workspace } from "../shared/types.ts";
 import { Workspaces } from "./Workspaces.tsx";
 
 afterEach(cleanup);
@@ -42,12 +42,20 @@ function listOf(workspaces: Workspace[]): Response {
 }
 
 /** Records what was asked for, and answers from the given responder. */
-function stubApi(t: TestContext, respond: Responder): Call[] {
+function stubApi(t: TestContext, respond: Responder, runs: Run[] = []): Call[] {
   const calls: Call[] = [];
   t.mock.method(globalThis, "fetch", (input: string | URL | Request, init?: RequestInit) => {
     const method = init?.method ?? "GET";
-    calls.push({ method, path: urlOf(input) });
-    return Promise.resolve(respond(method, urlOf(input)));
+    const path = urlOf(input);
+    calls.push({ method, path });
+    // The activity view reads /api/runs on mount. Answering it here keeps a test about
+    // the workspace list from having to know that a second endpoint exists -- and from
+    // answering it with the wrong shape, which is what falling through to the responder
+    // does.
+    if (path.endsWith("/api/runs")) {
+      return Promise.resolve(json({ runs }));
+    }
+    return Promise.resolve(respond(method, path));
   });
   return calls;
 }
@@ -61,6 +69,16 @@ function urlOf(input: string | URL | Request): string {
 
 function countOf(calls: Call[], method: string): number {
   return calls.filter((call) => call.method === method).length;
+}
+
+/**
+ * The GETs of the workspace list.
+ *
+ * A test about the list means this and not every GET: the page also reads the run log on
+ * mount, and counting both makes an assertion about one depend on the other.
+ */
+function listCalls(calls: Call[]): Call[] {
+  return calls.filter((call) => call.method === "GET" && call.path === "/api/workspaces");
 }
 
 /** A promise a test can resolve by hand, to hold a request open. */
@@ -97,8 +115,11 @@ test("New workspace posts, then re-reads the list", async (t) => {
   fireEvent.click(screen.getByRole("button", { name: "New workspace" }));
 
   await waitFor(() => assert.equal(countOf(calls, "POST"), 1));
-  await waitFor(() => assert.equal(countOf(calls, "GET"), 2));
-  assert.equal(calls[1]?.path, "/api/workspaces");
+  await waitFor(() => assert.equal(listCalls(calls).length, 2));
+  // The re-read comes AFTER the action: provisioning is not something the browser can
+  // predict, so every action re-reads rather than applying its own guess.
+  const posted = calls.findIndex((call) => call.method === "POST");
+  assert.ok(listCalls(calls).some((call) => calls.indexOf(call) > posted));
 });
 
 test("Delete deletes the workspace it belongs to, then re-reads the list", async (t) => {
@@ -110,7 +131,7 @@ test("Delete deletes the workspace it belongs to, then re-reads the list", async
 
   await waitFor(() => assert.equal(countOf(calls, "DELETE"), 1));
   assert.equal(calls.find((call) => call.method === "DELETE")?.path, "/api/workspaces/01ABC");
-  await waitFor(() => assert.equal(countOf(calls, "GET"), 2));
+  await waitFor(() => assert.equal(listCalls(calls).length, 2));
 });
 
 test("a failed action reports the error instead of leaving the button enabled", async (t) => {
@@ -148,9 +169,9 @@ test("re-reads the list while a workspace is still in flight", async (t) => {
   const calls = stubApi(t, () => listOf([workspace({ state: "PROVISIONING" })]));
   render(<Workspaces user={{ ownerId: "github#583231", login: "octocat", name: "The Octocat" }} />);
   await screen.findByText("golden-vole-6w4q");
-  assert.equal(countOf(calls, "GET"), 1);
+  assert.equal(listCalls(calls).length, 1);
 
-  await waitFor(() => assert.ok(countOf(calls, "GET") >= 2), { timeout: 4000 });
+  await waitFor(() => assert.ok(listCalls(calls).length >= 2), { timeout: 4000 });
   cleanup(); // stops the interval, so it does not outlive the test
 });
 
@@ -179,4 +200,27 @@ test("no toggle when nothing has been deleted", async (t) => {
   render(<Workspaces user={{ ownerId: "github#583231", login: "octocat", name: null }} />);
   await screen.findByText("golden-vole-6w4q");
   assert.equal(screen.queryByRole("checkbox"), null);
+});
+
+test("shows the run log, with the workspace named rather than its id", async (t) => {
+  // The record carries a workspace id and not a slug, because it does not duplicate the
+  // registry. Without the join the table shows an opaque id, which is what this catches.
+  stubApi(t, () => listOf([workspace({ id: "01ABC", slug: "golden-vole-6w4q" })]), [
+    {
+      id: "01RUN",
+      workspaceId: "01ABC",
+      state: "waiting",
+      mode: "interactive",
+      startedAt: "2026-10-05T01:00:00Z",
+      updatedAt: "2026-10-05T01:05:00Z",
+      lastSequence: 4,
+    },
+  ]);
+  render(<Workspaces user={{ ownerId: "github#583231", login: "octocat", name: "The Octocat" }} />);
+
+  await screen.findByText("Recent activity");
+  // "waiting for you" rather than "waiting": the state is the record's word, and this is a
+  // person reading it.
+  await screen.findByText("waiting for you");
+  assert.equal(screen.getAllByText("golden-vole-6w4q").length, 2, "once in the list, once in the log");
 });
