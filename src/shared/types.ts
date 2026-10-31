@@ -158,3 +158,15 @@ export interface Run {
 export interface RunList {
   runs: Run[];
 }
+
+/**
+ * One message on the run stream.
+ *
+ * `changed` names the runs that are new or whose state or timestamp moved since the last
+ * message, so the view can mark those rows without keeping its own copy of the previous
+ * list. A run that left the list is not named: the list replaces the old one wholesale.
+ */
+export interface RunUpdate {
+  runs: Run[];
+  changed: string[];
+}

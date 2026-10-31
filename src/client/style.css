@@ -218,20 +218,84 @@ a.button {
   cursor: pointer;
 }
 
-/* The run log, below the workspace list. */
-.activity {
-  margin-top: 2.5rem;
+/*
+ * The run count and the control that opens the list.
+ *
+ * `changed` is removed by the hook after two seconds. It marks the row, not the state:
+ * a run moving from working to waiting does not change the count, so the count alone
+ * cannot say that something happened.
+ */
+.badge {
+  font-variant-numeric: tabular-nums;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: transparent;
+  font-size: 0.85rem;
+  line-height: 1.4;
 }
 
-.activity h2 {
-  font-size: 1rem;
-  margin: 0;
+.badge.changed {
+  border-color: #b3202c;
+  background: #b3202c;
+  color: #fff;
+}
+
+tr.changed td {
+  background: rgba(179, 32, 44, 0.08);
+}
+
+.runs-panel td {
+  padding-top: 0;
+  padding-bottom: 0.9rem;
 }
 
 /*
- * "Waiting for you" is the one state worth looking at, because it means an agent has stopped
- * and cannot continue without a person. It is the state a notification will carry.
+ * "Waiting for you" is the one state worth looking at, because it means an agent has
+ * stopped and cannot continue without a person.
  */
-.state.waiting {
+.runs {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 0.25rem;
+}
+
+.runs li {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  padding: 0.1rem 0;
+}
+
+.run-state.waiting {
   font-weight: 600;
+}
+
+/*
+ * The stream's connection state.
+ *
+ * An offline table and an idle table are otherwise identical, so this has to be visible
+ * without opening anything.
+ */
+.stream {
+  font-size: 0.75rem;
+  text-transform: none;
+  margin-left: 0.5rem;
+}
+
+.stream::before {
+  content: "\25cf";
+  margin-right: 0.3rem;
+}
+
+.stream.live::before {
+  color: #2f7d32;
+}
+
+.stream.connecting::before {
+  color: #a06000;
+}
+
+.stream.offline::before {
+  color: #b3202c;
 }

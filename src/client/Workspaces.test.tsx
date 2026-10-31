@@ -2,8 +2,8 @@ import "./test-setup.ts"; // MUST be first: it installs the DOM react-dom needs.
 
 import assert from "node:assert/strict";
 import { afterEach, test, type TestContext } from "node:test";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { Run, Workspace } from "../shared/types.ts";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { Workspace } from "../shared/types.ts";
 import { Workspaces } from "./Workspaces.tsx";
 
 afterEach(cleanup);
@@ -42,22 +42,90 @@ function listOf(workspaces: Workspace[]): Response {
 }
 
 /** Records what was asked for, and answers from the given responder. */
-function stubApi(t: TestContext, respond: Responder, runs: Run[] = []): Call[] {
+function stubApi(t: TestContext, respond: Responder): Call[] {
   const calls: Call[] = [];
   t.mock.method(globalThis, "fetch", (input: string | URL | Request, init?: RequestInit) => {
     const method = init?.method ?? "GET";
     const path = urlOf(input);
     calls.push({ method, path });
-    // The activity view reads /api/runs on mount. Answering it here keeps a test about
-    // the workspace list from having to know that a second endpoint exists -- and from
-    // answering it with the wrong shape, which is what falling through to the responder
-    // does.
-    if (path.endsWith("/api/runs")) {
-      return Promise.resolve(json({ runs }));
-    }
     return Promise.resolve(respond(method, path));
   });
   return calls;
+}
+
+/**
+ * A stand-in for the browser's EventSource.
+ *
+ * The page no longer reads the run log with fetch, so a fetch stub cannot answer for it.
+ * The tests drive this by hand: `open()` is the connection coming up, and `emit()` is the
+ * server saying that something changed.
+ */
+/**
+ * The stream the page most recently opened.
+ *
+ * A module binding and not a static on the class: a public static that has to be
+ * reassigned cannot be readonly, and the class's other statics rightly are.
+ */
+const opened: { last: FakeEventSource | undefined } = { last: undefined };
+
+class FakeEventSource {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
+
+  readonly url: string;
+  readyState = FakeEventSource.CONNECTING;
+  onopen: ((event: Event) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  readonly #listeners = new Map<string, Set<(event: MessageEvent<string>) => void>>();
+
+  constructor(url: string) {
+    this.url = url;
+    opened.last = this;
+  }
+
+  addEventListener(type: string, listener: (event: MessageEvent<string>) => void): void {
+    const held = this.#listeners.get(type) ?? new Set();
+    held.add(listener);
+    this.#listeners.set(type, held);
+  }
+
+  removeEventListener(type: string, listener: (event: MessageEvent<string>) => void): void {
+    this.#listeners.get(type)?.delete(listener);
+  }
+
+  close(): void {
+    this.readyState = FakeEventSource.CLOSED;
+  }
+
+  open(): void {
+    this.readyState = FakeEventSource.OPEN;
+    this.onopen?.(new Event("open"));
+  }
+
+  emit(type: string, data: unknown): void {
+    const event = { data: JSON.stringify(data) } as MessageEvent<string>;
+    for (const listener of this.#listeners.get(type) ?? []) {
+      listener(event);
+    }
+  }
+}
+
+/** Installs the fake for one test and removes it afterwards. */
+function stubEventSource(t: TestContext): void {
+  const globals = globalThis as Record<string, unknown>;
+  // Assigned rather than mocked: EventSource does not exist in this DOM at all, and
+  // mock.method refuses a property that is not already a function.
+  const original = globals.EventSource;
+  globals.EventSource = FakeEventSource;
+  t.after(() => {
+    opened.last = undefined;
+    if (original === undefined) {
+      delete globals.EventSource;
+    } else {
+      globals.EventSource = original;
+    }
+  });
 }
 
 function urlOf(input: string | URL | Request): string {
@@ -202,25 +270,82 @@ test("no toggle when nothing has been deleted", async (t) => {
   assert.equal(screen.queryByRole("checkbox"), null);
 });
 
-test("shows the run log, with the workspace named rather than its id", async (t) => {
+test("shows the runs of a workspace in the table, and opens them in place", async (t) => {
   // The record carries a workspace id and not a slug, because it does not duplicate the
-  // registry. Without the join the table shows an opaque id, which is what this catches.
-  stubApi(t, () => listOf([workspace({ id: "01ABC", slug: "golden-vole-6w4q" })]), [
-    {
-      id: "01RUN",
-      workspaceId: "01ABC",
-      state: "waiting",
-      mode: "interactive",
-      startedAt: "2026-10-05T01:00:00Z",
-      updatedAt: "2026-10-05T01:05:00Z",
-      lastSequence: 4,
-    },
-  ]);
+  // registry. Without the grouping the badge would count nothing and the list would have
+  // nowhere to appear.
+  stubApi(t, () => listOf([workspace({ id: "01ABC", slug: "golden-vole-6w4q" })]));
+  stubEventSource(t);
   render(<Workspaces user={{ ownerId: "github#583231", login: "octocat", name: "The Octocat" }} />);
+  await screen.findByText("golden-vole-6w4q");
 
-  await screen.findByText("Recent activity");
-  // "waiting for you" rather than "waiting": the state is the record's word, and this is a
-  // person reading it.
-  await screen.findByText("waiting for you");
-  assert.equal(screen.getAllByText("golden-vole-6w4q").length, 2, "once in the list, once in the log");
+  const source = opened.last;
+  assert.ok(source !== undefined, "the page opens a stream");
+  act(() => {
+    source.open();
+    source.emit("runs", {
+      runs: [
+        {
+          id: "01RUN",
+          workspaceId: "01ABC",
+          state: "waiting",
+          mode: "interactive",
+          startedAt: "2026-10-05T01:00:00Z",
+          updatedAt: "2026-10-05T01:05:00Z",
+          lastSequence: 4,
+        },
+      ],
+      changed: [],
+    });
+  });
+
+  // The badge is the count, and it is also the control that opens the list.
+  const badge = await screen.findByRole("button", { name: /\(1\)/ });
+  assert.equal(badge.getAttribute("aria-expanded"), "false");
+  assert.equal(screen.queryByText("waiting for you"), null, "collapsed by default");
+
+  fireEvent.click(badge);
+  assert.equal(badge.getAttribute("aria-expanded"), "true");
+  // "waiting for you" rather than "waiting": the state is the record's word, and this is
+  // a person reading it.
+  assert.ok(await screen.findByText("waiting for you"));
+
+  fireEvent.click(badge);
+  await waitFor(() => assert.equal(screen.queryByText("waiting for you"), null));
+});
+
+test("marks the row while the stream reports a change", async (t) => {
+  stubApi(t, () => listOf([workspace({ id: "01ABC" })]));
+  stubEventSource(t);
+  render(<Workspaces user={{ ownerId: "github#583231", login: "octocat", name: null }} />);
+  await screen.findByText("golden-vole-6w4q");
+
+  const source = opened.last;
+  assert.ok(source !== undefined);
+  const at = "2026-10-05T01:05:00Z";
+  const run = { id: "01RUN", workspaceId: "01ABC", state: "waiting" as const, mode: "interactive" as const, startedAt: at, updatedAt: at, lastSequence: 4 };
+  act(() => {
+    source.open();
+    source.emit("runs", { runs: [run], changed: ["01RUN"] });
+  });
+
+  const badge = await screen.findByRole("button", { name: /\(1\)/ });
+  await waitFor(() => assert.ok(badge.classList.contains("changed")));
+  // The mark is temporary, so a table left open does not stay red for ever.
+  await waitFor(() => assert.ok(!badge.classList.contains("changed")), { timeout: 4_000 });
+});
+
+test("says whether the stream is live", async (t) => {
+  stubApi(t, () => listOf([workspace()]));
+  stubEventSource(t);
+  render(<Workspaces user={{ ownerId: "github#583231", login: "octocat", name: null }} />);
+  await screen.findByText("golden-vole-6w4q");
+
+  assert.ok(screen.getByText("connecting"));
+  const source = opened.last;
+  assert.ok(source !== undefined);
+  act(() => {
+    source.open();
+  });
+  assert.ok(await screen.findByText("live"));
 });

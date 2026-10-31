@@ -195,3 +195,13 @@ test("the run log is behind the session gate and returns what the control plane 
   assert.equal(response.status, 200);
   assert.deepEqual(await body(response), { runs });
 });
+
+test("the run stream is behind the session gate", async () => {
+  const deps = await testDeps();
+
+  // The stream carries every run the owner has, so it is gated like the rest of /api.
+  // Asserted without reading the body: a 200 here holds the connection open, which is a
+  // test that never finishes rather than a test that checks something.
+  const refused = await createApp(deps).request("/api/stream");
+  assert.equal(refused.status, 401);
+});
