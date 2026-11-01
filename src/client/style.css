@@ -227,6 +227,12 @@ a.button {
  */
 .badge {
   font-variant-numeric: tabular-nums;
+  /*
+   * `button` above sets `color: #fff` for a filled button. A badge is an outlined
+   * one, so it has to take the page's colour back: without this the count is white
+   * text on a white table, and only the red `changed` state is ever visible.
+   */
+  color: inherit;
   padding: 0.1rem 0.45rem;
   border-radius: 999px;
   border: 1px solid currentColor;
