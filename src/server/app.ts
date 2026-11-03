@@ -6,6 +6,7 @@
 import { existsSync } from "node:fs";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type Context } from "hono";
+import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { ApiError } from "../shared/errors.ts";
 import type { CreateWorkspaceRequest } from "../shared/types.ts";
@@ -13,6 +14,7 @@ import { registerAuth, requireSession } from "./auth.ts";
 import { registerEdge } from "./edge.ts";
 import type { AppEnv, Deps } from "./deps.ts";
 import { UpstreamError, UpstreamUnreachable } from "./errors.ts";
+import { RunStream } from "./runStream.ts";
 
 /**
  * Control plane statuses that are passed through unchanged.
@@ -40,12 +42,90 @@ export function createApp(deps: Deps): Hono<AppEnv> {
   registerAuth(app, deps);
   registerEdge(app, deps);
   registerWorkspaceRoutes(app, deps);
+  registerRunRoutes(app, deps);
 
   registerNotFound(app);
   registerStatic(app, deps.config.staticDir);
   app.onError((err, c) => handleError(err, c));
 
   return app;
+}
+
+/**
+ * The run log, behind the session gate.
+ *
+ * Two routes for one read. `/api/runs` answers one request, and `/api/stream` holds a
+ * connection open and pushes what changed. Both read the LOG and not the event queue, so
+ * neither takes a cursor, consumes nothing, and cannot hold the record's retention bound.
+ *
+ * There is one stream per OWNER and not one per tab. Each read mints a fresh assertion: a
+ * stream outlives the 120-second assertion that opened it, so the credential has to be
+ * derived per read rather than captured at connect time.
+ */
+function registerRunRoutes(app: Hono<AppEnv>, deps: Deps): void {
+  const gate = requireSession(deps);
+  const streams = new Map<string, RunStream>();
+
+  app.get("/api/runs", gate, async (c) => c.json({ runs: await c.get("controlPlane").runs() }));
+
+  app.get("/api/stream", gate, (c) => {
+    const { ownerId } = c.get("session");
+    const stream = streamFor(streams, deps, ownerId);
+
+    return streamSSE(c, async (sse) => {
+      const unsubscribe = stream.subscribe((update) => {
+        // A tab that closed between the write and the abort surfaces here. There is
+        // nothing to do about it and nothing worth logging: the abort handler is the
+        // one that cleans up.
+        void sse.writeSSE({ event: "runs", data: JSON.stringify(update) }).catch(() => {});
+      });
+
+      const release = () => {
+        unsubscribe();
+        if (stream.size === 0) {
+          streams.delete(ownerId);
+        }
+      };
+      sse.onAbort(release);
+
+      try {
+        // A ping and not a comment: some proxies buffer anything that is not an event,
+        // and an idle connection that proxies nothing is one a proxy may drop.
+        while (!sse.aborted) {
+          await sse.sleep(STREAM_HEARTBEAT_MS);
+          if (sse.aborted) {
+            break;
+          }
+          await sse.writeSSE({ event: "ping", data: "1" });
+        }
+      } finally {
+        release();
+      }
+    });
+  });
+}
+
+/** How often an idle stream says something, so a proxy does not drop it. */
+const STREAM_HEARTBEAT_MS = 15_000;
+
+/**
+ * The stream for one owner, started on first use.
+ *
+ * The read is built here rather than passed in because it needs that owner's assertion,
+ * and the assertion is minted per read. When the last tab goes away the entry is removed
+ * by the caller, so a person who never returns leaves no timer running.
+ */
+function streamFor(streams: Map<string, RunStream>, deps: Deps, ownerId: string): RunStream {
+  const existing = streams.get(ownerId);
+  if (existing !== undefined) {
+    return existing;
+  }
+  const stream = new RunStream(
+    async () => deps.controlPlaneFor(await deps.assertions.mint(ownerId)).runs(),
+    (err) => console.error("run stream:", err instanceof Error ? err.message : err),
+  );
+  streams.set(ownerId, stream);
+  return stream;
 }
 
 /**
