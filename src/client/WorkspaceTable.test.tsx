@@ -3,7 +3,7 @@ import "./test-setup.ts"; // MUST be first: it installs the DOM react-dom needs.
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { Workspace, WorkspaceState } from "../shared/types.ts";
+import type { Run, Workspace, WorkspaceState } from "../shared/types.ts";
 import { WorkspaceTable } from "./WorkspaceTable.tsx";
 
 afterEach(cleanup);
@@ -26,9 +26,23 @@ function workspace(overrides: Partial<Workspace> = {}): Workspace {
   };
 }
 
-function renderTable(workspaces: Workspace[], busy = false, ownerId = "github#583231") {
+function renderTable(
+  workspaces: Workspace[],
+  busy = false,
+  ownerId = "github#583231",
+  runs: Run[] = [],
+  flashed: ReadonlySet<string> = new Set(),
+) {
   return render(
-    <WorkspaceTable workspaces={workspaces} busy={busy} ownerId={ownerId} onRemove={() => {}} onRetry={() => {}} />,
+    <WorkspaceTable
+      workspaces={workspaces}
+      runs={runs}
+      flashed={flashed}
+      busy={busy}
+      ownerId={ownerId}
+      onRemove={() => {}}
+      onRetry={() => {}}
+    />,
   );
 }
 
@@ -97,6 +111,8 @@ test("Delete reports the id it was clicked for", () => {
   render(
     <WorkspaceTable
       workspaces={[workspace()]}
+      runs={[]}
+      flashed={new Set()}
       busy={false}
       ownerId="github#583231"
       onRemove={(id) => removed.push(id)}
@@ -112,6 +128,8 @@ test("Retry reports the id it was clicked for", () => {
   render(
     <WorkspaceTable
       workspaces={[workspace({ state: "FAILED" })]}
+      runs={[]}
+      flashed={new Set()}
       busy={false}
       ownerId="github#583231"
       onRemove={() => {}}

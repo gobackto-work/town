@@ -112,6 +112,7 @@ export function fakeControlPlane(overrides: Partial<ControlPlane> = {}): Control
     remove: unstubbed,
     retry: unstubbed,
     authorize: unstubbed,
+    runs: unstubbed,
     ...overrides,
   };
 }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { EdgeFailureCode, Identity } from "../shared/types.ts";
 import { takeQueryCode } from "./queryMessage.ts";
 import { WorkspaceTable } from "./WorkspaceTable.tsx";
+import { useRunStream, type StreamStatus } from "./useRunStream.ts";
 import { useWorkspaces } from "./useWorkspaces.ts";
 
 /**
@@ -30,6 +31,7 @@ interface WorkspacesProps {
 
 export function Workspaces({ user }: WorkspacesProps) {
   const { workspaces, error, busy, refresh, create, remove, retry } = useWorkspaces();
+  const { runs, status, flashed } = useRunStream();
   const refused = edgeError();
 
   // DELETED is a RECORD, not a resource: the namespace and the broker are long gone, and
@@ -45,7 +47,9 @@ export function Workspaces({ user }: WorkspacesProps) {
       <header className="bar">
         <div>
           <h1>town</h1>
-          <p className="sub">Pi agent workspaces</p>
+          <p className="sub">
+            Pi agent workspaces <StreamStatus status={status} />
+          </p>
         </div>
         <div className="who">
           <span className="muted">{user.name ?? user.login}</span>
@@ -57,17 +61,7 @@ export function Workspaces({ user }: WorkspacesProps) {
         </div>
       </header>
 
-      {refused !== null && (
-        <p className="banner" role="alert">
-          {refused}
-        </p>
-      )}
-
-      {error !== null && (
-        <p className="banner" role="alert">
-          {error}
-        </p>
-      )}
+      <Banners refused={refused} error={error} />
 
       <div className="toolbar">
         <button type="button" onClick={create} disabled={busy}>
@@ -86,11 +80,60 @@ export function Workspaces({ user }: WorkspacesProps) {
 
       <WorkspaceTable
         workspaces={visible}
+        runs={runs}
+        flashed={flashed}
         busy={busy}
         ownerId={user.ownerId}
         onRemove={remove}
         onRetry={retry}
       />
+    </>
+  );
+}
+
+/**
+ * Whether the table is still being updated.
+ *
+ * Not decoration. A run log that has stopped receiving, and a run log with nothing in it,
+ * look the same in every other pixel of this page -- so the one thing that tells them
+ * apart has to be visible without being opened.
+ */
+const STREAM_LABEL: Record<StreamStatus, string> = {
+  live: "live",
+  connecting: "connecting",
+  offline: "offline",
+};
+
+function StreamStatus({ status }: { readonly status: StreamStatus }) {
+  return (
+    <span className={`stream ${status}`} title={`the run log is ${STREAM_LABEL[status]}`}>
+      {STREAM_LABEL[status]}
+    </span>
+  );
+}
+
+/**
+ * The error banners.
+ *
+ * One component rather than two copies of the same four lines. They are shown the same way
+ * so that a failure never looks like nothing happened.
+ */
+function Banners(props: {
+  readonly refused: string | null;
+  readonly error: string | null;
+}) {
+  return (
+    <>
+      {props.refused !== null && (
+        <p className="banner" role="alert">
+          {props.refused}
+        </p>
+      )}
+      {props.error !== null && (
+        <p className="banner" role="alert">
+          {props.error}
+        </p>
+      )}
     </>
   );
 }

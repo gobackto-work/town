@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { IN_FLIGHT_STATES, type Workspace } from "../shared/types.ts";
 import { api, messageOf } from "./api.ts";
+import { usePolling } from "./usePolling.ts";
 
 /** How often to re-read while something is still changing. */
 const POLL_MS = 2000;
@@ -47,7 +48,11 @@ export function useWorkspaces(): WorkspacesController {
     void load();
   }, [load]);
 
-  usePolling(workspaces, load);
+  usePolling(
+    workspaces.some((workspace) => IN_FLIGHT_STATES.includes(workspace.state)),
+    load,
+    POLL_MS,
+  );
 
   // The error is set AFTER the re-read, not before. `load` clears any previous error
   // when it succeeds, so setting this first would let the refresh wipe the message the
@@ -78,22 +83,4 @@ export function useWorkspaces(): WorkspacesController {
     remove: (id) => void act(() => api.remove(id)),
     retry: (id) => void act(() => api.retry(id)),
   };
-}
-
-/**
- * Re-reads the list while anything is still in flight.
- *
- * Polling rather than a stream: provisioning takes seconds, the list is small, and a
- * websocket would be more moving parts than the problem has. Revisit if a workspace
- * can be in flight for minutes, which would make the interval the wrong shape.
- */
-function usePolling(workspaces: Workspace[], load: () => Promise<void>): void {
-  const inFlight = workspaces.some((workspace) => IN_FLIGHT_STATES.includes(workspace.state));
-  useEffect(() => {
-    if (!inFlight) {
-      return undefined;
-    }
-    const timer = setInterval(() => void load(), POLL_MS);
-    return () => clearInterval(timer);
-  }, [inFlight, load]);
 }
