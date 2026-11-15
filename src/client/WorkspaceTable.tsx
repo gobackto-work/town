@@ -219,7 +219,7 @@ function RunList({ id, runs }: RunListProps) {
       {runs.map((run) => (
         <li key={run.id}>
           <span className={run.state === "waiting" ? "run-state waiting" : "run-state"}>
-            {RUN_SUMMARY[run.state]}
+            {Object.hasOwn(RUN_SUMMARY, run.state) ? RUN_SUMMARY[run.state] : "Unknown run state"}
           </span>
           <span className="muted small">{formatTime(run.updatedAt)}</span>
           <code className="muted small">{run.id}</code>
@@ -263,9 +263,9 @@ function StateBadge({ state }: StateBadgeProps) {
   return <span className={`state state-${state.toLowerCase()}`}>{state}</span>;
 }
 
-/** DELETING is already under way and DELETED is finished, so neither is offered. */
+/** Unknown states must not enable destructive actions. */
 function isDeletable(state: WorkspaceState): boolean {
-  return state !== "DELETING" && state !== "DELETED";
+  return state === "RUNNING" || state === "PROVISIONING" || state === "SUSPENDED" || state === "FAILED";
 }
 
 function formatTime(iso: string): string {

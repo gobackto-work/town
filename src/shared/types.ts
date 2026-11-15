@@ -3,9 +3,8 @@
 // These mirror the pestilence API's wire format exactly -- its `workspaceDTO` in
 // internal/api/api.go. Hand-written rather than generated: there is one endpoint
 // family, and a codegen pipeline would be more machinery than the contract is worth.
-// The cost is that a change on the Go side has to be made here too, which is why the
-// field names are spelled identically and a test asserts a real response parses into
-// these types rather than into something merely similar.
+// The cost is that a change on the Go side has to be made here too. Client tests use
+// stub responses; they do not verify compatibility with a real control plane.
 
 /** Mirrors the Go state machine in internal/workspace/workspace.go. */
 export type WorkspaceState =

@@ -46,6 +46,20 @@ function renderTable(
   );
 }
 
+test("unknown upstream states are visible and do not enable workspace actions", () => {
+  const unknownWorkspace = workspace({ state: "FUTURE_STATE" as WorkspaceState });
+  const unknownRun = {
+    id: "run-1", workspaceId: unknownWorkspace.id, state: "future_state", mode: "interactive",
+    startedAt: "2026-09-27T05:00:00Z", updatedAt: "2026-09-27T05:00:00Z", lastSequence: 1,
+  } as unknown as Run;
+  renderTable([unknownWorkspace], false, "github#583231", [unknownRun]);
+  assert.ok(screen.getByText("FUTURE_STATE"));
+  assert.equal(screen.queryByRole("button", { name: "Delete" }), null);
+  assert.equal(screen.queryByRole("button", { name: "Retry" }), null);
+  fireEvent.click(screen.getByRole("button", { name: /\(1\)/ }));
+  assert.ok(screen.getByText("Unknown run state"));
+});
+
 test("says so when there is nothing to show", () => {
   renderTable([]);
   assert.ok(screen.getByText("No workspaces yet."));
